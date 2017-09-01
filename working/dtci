@@ -1,0 +1,255 @@
+#!/usr/bin/env php
+<?php
+require '../vendor/autoload.php';
+
+$prompter = new CLIFramework\Prompter();
+
+$key = "access key";
+$secret = "secret key";
+$organic = "organic key";
+$apiURL = "https://secure.ifbyphone.com/ibp_api.php";
+
+switch ($argv[1]) {
+    case "add-number":
+        if (empty($argv[2])) {
+            $numberType = $prompter->ask('What kind?', array('local', 'tollfree', 'true800'));
+        } else {
+            $numberType = $argv[2];
+        }
+        $quantity = $prompter->ask('How many?');
+
+        switch ($numberType) {
+            case "local":
+                $areaCode = $prompter->ask('Area Code?');
+                echo "Looking for ".(!empty($areaCode) ? "a ".$areaCode : "any")." number...";
+
+                $results = acquireNumber($apiURL,$key,$secret,$quantity,$numberType,$areaCode);
+                if ($results) {
+                    echo "Successfully acquired ".$quantity." ".$numberType." number(s)\r\n";
+                    if (is_object($results)) {
+                        foreach ($results as $result) {
+                            echo "ACQUIRED: ".$result."\r\n";
+                        }
+                    }
+                } else {
+                    echo "Could not find any ".$quantity." ".$numberType." number(s)\r\n";
+                }
+
+            break;
+            case "tollfree":
+                $results = acquireNumber($apiURL,$key,$secret,$quantity,$numberType);
+                if ($results) {
+                    echo "Successfully acquired ".$quantity." ".$numberType." number(s)\r\n";
+                    if (is_object($results)) {
+                        foreach ($results as $result) {
+                            updateLabel($apiURL,$key,$secret,$result,"Hackday Number");
+                            echo "ACQUIRED: ".$result."\r\n";
+                        }
+                    } else {
+                        updateLabel($apiURL,$key,$secret,$results,"Hackday Number");
+                        echo "ACQUIRED: ".$results."\r\n";
+                    }
+                } else {
+                    echo "Could not find any ".$quantity." ".$numberType." number(s)\r\n";
+                }
+            break;
+            case "true800":
+                if (acquireNumber($apiURL,$key,$secret,$quantity,$numberType)) {
+                    echo "Successfully acquired ".$quantity." ".$numberType." number(s)";
+                }
+            break;
+            default:
+                echo "Unsupported Number Type";
+            break;
+        }
+
+    break;
+    case "update-number":
+        $number = $prompter->ask('What number would you like to update?');
+
+        // lookup number
+    break;
+    case "delete-number":
+        if (empty($argv[2])) {
+            $number = $prompter->ask('What number would you like to delete?');
+        } else {
+            $number = $argv[2];
+        }
+        if (deleteNumber($apiURL,$key,$secret,$number)) {
+            echo $number . " Successfully Deleted";
+        } else {
+            echo "Failed to delete ".$number;
+        }
+    break;
+    case "cdr":
+        $type = $prompter->ask("Search type?",array('daterange','sid'));
+        switch ($type) {
+            case "daterange":
+                $from = $prompter->ask('From Date?');
+                $to = $prompter->ask('To Date?');
+
+                $result = getCDR($apiURL,$key, $secret,$from,$to);
+                echo $result;
+            break;
+            case "sid":
+                $sid = $prompter->ask('SID?');
+
+                $result = getCDR($apiURL,$key, $secret,null,null,$sid);
+                echo $result;
+            break;
+            default:
+                echo "Unsupported type";
+            break;
+        }
+
+    break;
+    default:
+        echo "Unsupported Action";
+    break;
+}
+
+
+/**
+ * @param $apiURL
+ * @param $access
+ * @param $secret
+ * @param $quantity
+ * @param $type
+ * @param string $area_code
+ * @return bool
+ */
+function acquireNumber($apiURL, $access, $secret, $quantity, $type, $area_code="") {
+    $url = $apiURL . "?access_key=".$access.
+    "&secret_access_key=".$secret.
+    "&action=numbers.order".
+    "&quantity=".$quantity.
+    "&type=".$type.
+    "&search=".$area_code.
+    "&fill_quantity=1";
+
+    $ch = curl_init();
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHP/5.2.9');
+
+    $result = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error:' . curl_error($ch);
+    }
+    curl_close ($ch);
+    $result = simplexml_load_string($result);
+    if ($result->result == "success") {
+        return $result->result_description->numbers->number;
+    } else {
+        return false;
+    }
+}
+
+/**
+ * @param $apiURL
+ * @param $access
+ * @param $secret
+ * @param $number
+ * @return bool
+ */
+function deleteNumber($apiURL, $access, $secret, $number) {
+    $url = $apiURL . "?access_key=".$access.
+    "&secret_access_key=".$secret.
+    "&action=numbers.remove".
+    "&number=".$number;
+
+    $ch = curl_init();
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHP/5.2.9');
+
+    $result = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error:' . curl_error($ch);
+    }
+    curl_close ($ch);
+    $result = simplexml_load_string($result);
+    if ($result->result == "success") {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+/**
+ * @param $apiURL
+ * @param $access
+ * @param $secret
+ * @param $number
+ * @param $label
+ * @return bool
+ */
+function updateLabel($apiURL, $access, $secret, $number, $label) {
+    $url = $apiURL . "?access_key=".$access.
+        "&secret_access_key=".$secret.
+        "&action=routing.update_label".
+        "&phone_number=".$number.
+        "&description=".urlencode($label);
+    $ch = curl_init();
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHP/5.2.9');
+
+    $result = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error:' . curl_error($ch);
+    }
+    curl_close ($ch);
+    $result = simplexml_load_string($result);
+    if ($result->result == "success") {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+
+/**
+ * @param $apiURL
+ * @param $access
+ * @param $secret
+ * @param string $from
+ * @param string $to
+ * @param string $sid
+ * @return mixed
+ */
+function getCDR($apiURL, $access, $secret, $from="", $to="", $sid="") {
+    $url = $apiURL . "?access_key=".$access.
+        "&secret_access_key=".$secret.
+        "&action=report.call_detail".($sid == "" ?
+        "&start_date=".$from.
+        "&end_date=".$to :
+        "&search_sid=".$sid).
+        "&sid=1".
+        "&phone_label=1".
+        "&dnis=1".
+        "&ani=1".
+        "&date_added=1".
+        "&format=csv";
+
+    $ch = curl_init();
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHP/5.2.9');
+
+    $result = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error:' . curl_error($ch);
+    }
+    curl_close ($ch);
+
+    return $result;
+}
