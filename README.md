@@ -1,6 +1,8 @@
 # DT CLI
 
 The PHP "CliFramework" was used to build my hack-day CLI tool. I choose this framework for speed, but would not suggest for production use.
+Application is in /working/dtci
+
 
 # Authentication
 
