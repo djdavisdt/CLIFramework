@@ -1,3 +1,26 @@
+# DT CLI
+
+This framework was used to build my hack-day CLI tool. I would not suggest this framework for production use. This was chosen for quick development.
+
+# Authentication
+
+Access, Secret and Organic keys are currently hard coded in /working/dtci
+
+# Set up
+
+- Install PHP 5 (or higher)
+- Set up credentials in /working/dtci
+- Alias /working/dtci to whatever you want
+
+# Commands
+
+dtcli add-number
+dtcli delete-number
+dtcli cdr
+
+Interactive prompts will guide you the rest of the way!
+
+
 CLIFramework
 ============
 
